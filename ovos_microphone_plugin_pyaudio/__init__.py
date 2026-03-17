@@ -30,6 +30,7 @@ class PyAudioMicrophone(Microphone):
     period_size: int = 1024
     timeout: float = 5.0
     multiplier: float = 1.0
+    float32_output: bool = False  # use paFloat32 format (required by ggwave)
     full_chunk = bytes()
     _thread: Optional[Thread] = None
     _queue: "Queue[Optional[bytes]]" = field(default_factory=Queue)
@@ -76,55 +77,73 @@ class PyAudioMicrophone(Microphone):
         self._thread.join()
         self._thread = None
 
-    def _stream_callback(self, in_data):
-        """Callback from pyaudio.
+    def _stream_callback(self, in_data: bytes) -> None:
+        """Buffer *in_data* and enqueue complete chunks.
 
-        Rather than buffer chunks, we simply assigned the current chunk to the
-        class instance and signal that it's ready.
+        Gain via ``audioop`` is skipped when *float32_output* is ``True``
+        because ``audioop`` does not support IEEE 754 float32 bytes.
         """
-        # Increase loudness of audio
-        if self.multiplier != 1.0:
-            in_data = audioop.mul(
-                in_data, self.sample_width, self.multiplier
-            )
+        if self.multiplier != 1.0 and not self.float32_output:
+            in_data = audioop.mul(in_data, self.sample_width, self.multiplier)
 
         self.full_chunk += in_data
         while len(self.full_chunk) >= self.chunk_size:
             self._queue.put_nowait(self.full_chunk[: self.chunk_size])
             self.full_chunk = self.full_chunk[self.chunk_size:]
 
-    def _run(self):
+    def _run(self) -> None:
         try:
-            assert self.sample_width in {
-                2,
-                4,
-            }, "Only 16-bit and 32-bit sample widths are supported"
+            if not self.float32_output:
+                assert self.sample_width in {
+                    2,
+                    4,
+                }, "Only 16-bit and 32-bit sample widths are supported"
 
             stream = None
             try:
                 LOG.debug(
-                    "Opening microphone (rate=%s, width=%s, channels=%s)",
+                    "Opening microphone (rate=%s, width=%s, channels=%s, float32=%s)",
                     self.sample_rate,
                     self.sample_width,
                     self.sample_channels,
+                    self.float32_output,
                 )
 
                 audio = pyaudio.PyAudio()
+                device_index = None
                 if self.device != "default":
-                    index = self.find_input_device(self.device)
-                    source = _Mic(device_index=index, sample_rate=self.sample_rate, chunk_size=self.chunk_size)
+                    device_index = self.find_input_device(self.device)
+
+                if self.float32_output:
+                    # Use pyaudio directly with paFloat32 — bypasses the
+                    # speech_recognition abstraction which hard-codes paInt16.
+                    stream = audio.open(
+                        format=pyaudio.paFloat32,
+                        channels=self.sample_channels,
+                        rate=self.sample_rate,
+                        frames_per_buffer=self.period_size,
+                        input_device_index=device_index,
+                        input=True,
+                    )
                 else:
-                    source = _Mic(sample_rate=self.sample_rate, chunk_size=self.chunk_size)
-                stream = audio.open(
-                    format=source.format,
-                    frames_per_buffer=source.CHUNK,
-                    input_device_index=source.device_index,
-                    rate=source.SAMPLE_RATE,
-                    channels=1,
-                    input=True  # stream is an input stream
-                )
+                    if device_index is not None:
+                        source = _Mic(device_index=device_index,
+                                      sample_rate=self.sample_rate,
+                                      chunk_size=self.chunk_size)
+                    else:
+                        source = _Mic(sample_rate=self.sample_rate,
+                                      chunk_size=self.chunk_size)
+                    stream = audio.open(
+                        format=source.format,
+                        frames_per_buffer=source.CHUNK,
+                        input_device_index=source.device_index,
+                        rate=source.SAMPLE_RATE,
+                        channels=1,
+                        input=True,
+                    )
+
                 stream.start_stream()
-                while True:
+                while self._is_running:
                     self._stream_callback(stream.read(self.chunk_size))
 
             except Exception:

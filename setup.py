@@ -81,5 +81,5 @@ setup(
         'Programming Language :: Python :: 3.6',
     ],
     keywords='ovos plugin listener microphone pyaudio',
-    entry_points={'ovos.plugin.microphone': PLUGIN_ENTRY_POINT}
+    entry_points={'opm.microphone': PLUGIN_ENTRY_POINT}
 )
