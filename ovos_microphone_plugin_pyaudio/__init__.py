@@ -12,9 +12,9 @@
 #
 import re
 from dataclasses import dataclass, field
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from threading import Thread
-from typing import Optional
+from typing import Optional, Union
 
 import pyaudio
 from ovos_config import Configuration
@@ -26,6 +26,33 @@ try:
 except ImportError:
     audioop = None
 
+DeviceRef = Union[str, int, None]
+
+
+def _default_device() -> DeviceRef:
+    """Read device preference from the OVOS config hierarchy.
+
+    Resolution order:
+    1. ``listener.microphone.ovos-microphone-plugin-pyaudio.device``
+    2. ``listener.device``
+    3. ``"default"``
+
+    Returns:
+        Device name, index, or ``"default"``.
+    """
+    listener = Configuration().get("listener", {})
+    microphone = listener.get("microphone", {})
+    if isinstance(microphone, dict):
+        plugin_cfg = microphone.get("ovos-microphone-plugin-pyaudio", {})
+        if isinstance(plugin_cfg, dict):
+            device = plugin_cfg.get("device")
+            if device is not None:
+                return device
+    device = listener.get("device")
+    if device is not None:
+        return device
+    return "default"
+
 
 @dataclass
 class PyAudioMicrophone(Microphone):
@@ -36,7 +63,7 @@ class PyAudioMicrophone(Microphone):
     with consumers that require IEEE 754 float32 bytes (e.g. ggwave).
 
     Args:
-        device: Device name, regex pattern, or ``"default"``.
+        device: Device name, integer index, regex pattern, or ``"default"``.
         period_size: Frames per read call (internal buffer granularity).
         timeout: Seconds to block in :meth:`read_chunk` before returning
             ``None``.
@@ -45,19 +72,27 @@ class PyAudioMicrophone(Microphone):
         float32_output: When ``True``, opens the stream with
             ``pyaudio.paFloat32`` and delivers raw float32 bytes.
         muted: If ``True``, enqueue silence instead of captured audio.
+        queue_maxsize: Maximum number of chunks buffered before oldest is
+            dropped (eviction policy keeps most-recent audio).
     """
 
-    device: str = field(default_factory=lambda: Configuration().get("listener", {}).get("device") or "default")
+    device: DeviceRef = field(default_factory=_default_device)
     period_size: int = 1024
     timeout: float = 5.0
     multiplier: float = 1.0
     float32_output: bool = False
     muted: bool = False
+    queue_maxsize: int = 8
 
     _thread: Optional[Thread] = field(default=None, init=False, repr=False)
-    _queue: "Queue[Optional[bytes]]" = field(default_factory=Queue, init=False, repr=False)
+    _queue: "Queue[Optional[bytes]]" = field(init=False, repr=False)
     _is_running: bool = field(default=False, init=False, repr=False)
     _chunk_buffer: bytearray = field(default_factory=bytearray, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Initialise the bounded queue after dataclass field assignment."""
+        queue_size = max(1, int(self.queue_maxsize))
+        self._queue: "Queue[Optional[bytes]]" = Queue(maxsize=queue_size)
 
     # ------------------------------------------------------------------
     # Device discovery
@@ -77,24 +112,31 @@ class PyAudioMicrophone(Microphone):
             pa.terminate()
 
     @classmethod
-    def find_input_device(cls, device_name: str) -> Optional[int]:
+    def find_input_device(cls, device_name: DeviceRef) -> Optional[int]:
         """Return the device index for *device_name*, or ``None`` for default.
 
-        Matching order: exact name → substring → regex.
+        Matching order: integer passthrough → exact name → substring → regex.
 
         Args:
-            device_name: Device name, regex pattern, or ``"default"``.
+            device_name: Device name, integer index, regex pattern, or
+                ``"default"``.
 
         Returns:
             Device index, or ``None`` if not found / default requested.
         """
-        if not device_name or device_name.lower() == "default":
+        if device_name is None:
+            return None
+
+        if isinstance(device_name, int):
+            return device_name
+
+        if not device_name or str(device_name).lower() == "default":
             return None
         if str(device_name).isdigit():
             return int(device_name)
 
         devices = cls.list_input_devices()
-        lowered = device_name.lower()
+        lowered = str(device_name).lower()
         LOG.debug("Searching for input device: %s", device_name)
 
         for idx, dev in devices:
@@ -105,7 +147,7 @@ class PyAudioMicrophone(Microphone):
                 return idx
 
         try:
-            pattern = re.compile(device_name, re.IGNORECASE)
+            pattern = re.compile(str(device_name), re.IGNORECASE)
             for idx, dev in devices:
                 if pattern.search(dev["name"]):
                     return idx
@@ -145,7 +187,8 @@ class PyAudioMicrophone(Microphone):
 
     def start(self) -> None:
         """Open the audio stream and start the capture thread."""
-        assert self._thread is None, "Already started"
+        if self._thread is not None:
+            raise RuntimeError("Already started")
         self._is_running = True
         self._chunk_buffer.clear()
         self._thread = Thread(target=self._run, daemon=True)
@@ -153,7 +196,8 @@ class PyAudioMicrophone(Microphone):
 
     def read_chunk(self) -> Optional[bytes]:
         """Return one chunk of audio bytes, or ``None`` on timeout."""
-        assert self._is_running, "Not running"
+        if not self._is_running:
+            raise RuntimeError("Not running")
         try:
             return self._queue.get(timeout=self.timeout)
         except Empty:
@@ -174,7 +218,12 @@ class PyAudioMicrophone(Microphone):
     # ------------------------------------------------------------------
 
     def _enqueue(self, in_data: bytes) -> None:
-        """Apply gain, buffer *in_data*, and enqueue complete chunks."""
+        """Apply gain, buffer *in_data*, and enqueue complete chunks.
+
+        When the queue is full the oldest chunk is dropped so that the most
+        recent audio is always available (same eviction policy as the
+        sounddevice plugin).
+        """
         if self.muted:
             in_data = bytes(len(in_data))
 
@@ -183,8 +232,16 @@ class PyAudioMicrophone(Microphone):
 
         self._chunk_buffer.extend(in_data)
         while len(self._chunk_buffer) >= self.chunk_size:
-            self._queue.put_nowait(bytes(self._chunk_buffer[: self.chunk_size]))
+            chunk = bytes(self._chunk_buffer[: self.chunk_size])
             del self._chunk_buffer[: self.chunk_size]
+            try:
+                self._queue.put_nowait(chunk)
+            except Full:
+                try:
+                    self._queue.get_nowait()
+                except Empty:
+                    pass
+                self._queue.put_nowait(chunk)
 
     def _run(self) -> None:
         """Capture thread: open stream, read blocks, enqueue chunks."""
