@@ -19,3 +19,4 @@ jobs:
       opm_perf_threshold_ms: 500
       opm_min_version: '2.2.3a1'
       opm_max_version: '3.0.0'
+      system_deps: 'portaudio19-dev'
