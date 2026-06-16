@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.0.0a3](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/tree/0.0.0a3) (2026-06-16)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/compare/V0.0.0a2...0.0.0a3)
+
+**Merged pull requests:**
+
+- chore: add missing shared CI workflows [\#20](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/pull/20) ([JarbasAl](https://github.com/JarbasAl))
+- Update dependency ovos-plugin-manager to v2 [\#12](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/pull/12) ([renovate[bot]](https://github.com/apps/renovate))
+- Configure Renovate [\#2](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/pull/2) ([renovate[bot]](https://github.com/apps/renovate))
+- fix: compatibility with ovos-plugin-manager 1.X.X [\#1](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/pull/1) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.0.0a2](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/tree/V0.0.0a2) (2023-05-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/compare/V0.0.0a1...V0.0.0a2)
+
 ## [V0.0.0a1](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/tree/V0.0.0a1) (2023-05-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/compare/f08cbe7fb66d32ae3ca644e1293c59fafef58095...V0.0.0a1)
