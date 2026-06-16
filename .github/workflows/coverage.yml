@@ -11,6 +11,7 @@ jobs:
     secrets: inherit
     with:
       python_version: '3.11'
+      system_deps: 'portaudio19-dev'
       coverage_source: 'ovos_microphone_plugin_pyaudio'
       test_path: 'test'
       install_extras: '.[test]'
