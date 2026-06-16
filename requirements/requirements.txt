@@ -1,3 +1,0 @@
-ovos-plugin-manager>=0.0.23,<3.0.0
-ovos-config
-pyaudio
