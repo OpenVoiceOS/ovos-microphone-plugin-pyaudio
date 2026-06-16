@@ -1,0 +1,18 @@
+name: Publish Stable
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  publish_stable:
+    if: github.actor != 'github-actions[bot]'
+    uses: OpenVoiceOS/gh-automations/.github/workflows/publish-stable.yml@dev
+    secrets: inherit
+    with:
+      version_file: 'ovos_microphone_plugin_pyaudio/version.py'
+      publish_pypi: true
+      sync_dev: true
+      update_changelog: true
