@@ -1,12 +1,13 @@
 # ovos-microphone-plugin-pyaudio
 
-Cross-platform microphone plugin for OVOS, backed by PortAudio via `pyaudio`.
-No `speech_recognition` dependency — uses the PyAudio API directly with
-proper format mapping for int16, int32, and float32 capture.
+This microphone plugin for OVOS runs on Linux, macOS, and Windows through
+PortAudio via `pyaudio`. It does not depend on `speech_recognition`. It
+calls the PyAudio API directly and maps `sample_width` to the matching
+PyAudio format for int16, int32, and float32 capture.
 
-**Platform**: Linux, macOS, Windows (requires `libportaudio2` system library).
+**Platform**: Linux, macOS, Windows (requires the `libportaudio2` system library).
 
-**Source**: `PyAudioMicrophone` — `ovos_microphone_plugin_pyaudio/__init__.py`
+**Source**: `PyAudioMicrophone` in `ovos_microphone_plugin_pyaudio/__init__.py`
 
 **Entry point**: `opm.microphone = ovos-microphone-plugin-pyaudio`
 
@@ -19,10 +20,10 @@ proper format mapping for int16, int32, and float32 capture.
 | `device` | `str\|int\|None` | config hierarchy / `"default"` | Device name, integer index, or `"default"` |
 | `period_size` | `int` | `1024` | Frames per `stream.read()` call |
 | `timeout` | `float` | `5.0` | Seconds to block in `read_chunk()` before returning `None` |
-| `multiplier` | `float` | `1.0` | Gain multiplier (skipped for float32; requires `audioop`) |
-| `float32_output` | `bool` | `False` | Use `paFloat32` — required by ggwave |
+| `multiplier` | `float` | `1.0` | Gain multiplier (skipped for float32, requires `audioop`) |
+| `float32_output` | `bool` | `False` | Use `paFloat32`, required by ggwave |
 | `muted` | `bool` | `False` | Enqueue silence instead of real audio |
-| `queue_maxsize` | `int` | `8` | Max buffered chunks; oldest evicted when full |
+| `queue_maxsize` | `int` | `8` | Max buffered chunks, oldest evicted when full |
 | `sample_rate` | `int` | `16000` | Sample rate in Hz (base class) |
 | `sample_width` | `int` | `2` | Bytes per sample (base class) |
 | `sample_channels` | `int` | `1` | Channels (base class) |
@@ -62,9 +63,9 @@ proper format mapping for int16, int32, and float32 capture.
 
 ## Device selection
 
-`find_input_device(name)` tries: integer passthrough → exact name → substring
-→ regex. `list_input_devices()` returns `(index, info_dict)` pairs for all
-input-capable devices.
+`find_input_device(name)` tries, in order: integer passthrough, exact name,
+substring, then regex. `list_input_devices()` returns `(index, info_dict)`
+pairs for all input-capable devices.
 
 ### Device resolution order
 
