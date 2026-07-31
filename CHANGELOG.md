@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.0a4](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/tree/0.0.0a4) (2026-07-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/compare/0.0.0a3...0.0.0a4)
+
+**Merged pull requests:**
+
+- docs: rewrite README in Simplified Technical English [\#21](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/pull/21) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.0.0a3](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/tree/0.0.0a3) (2026-06-16)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-microphone-plugin-pyaudio/compare/V0.0.0a2...0.0.0a3)
